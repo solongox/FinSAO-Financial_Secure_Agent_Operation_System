@@ -86,3 +86,19 @@ test('ignores the phone status bar at the top of a screenshot', () => {
   assert.equal(r.merchant, 'Lawson 罗森');
   assert.equal(r.category, 'GROCERIES');
 });
+
+test('reads bill rows whose sign or decimal point OCR lost, using the time line under each', () => {
+  const text = '9:41 eee5G\n\n《 账单\n\n10 月 . 支出 浸 28.60\n\n二\n\n各 美 团 外 卖 35 00\n餐饮 美食 10-31 12:30\n\n各 酒 酒 出行 .18 60\n交通 出 行 10-30 21:05\n\n| 永 辉 超市 _86 40\n日 用 百货 10-29 19:12\n';
+  const list = parseReceipts(text, new Date('2026-11-01T10:00:00'));
+  assert.deepEqual(list.map(x => [x.merchant, x.amount, x.category, x.date]), [
+    ['美团外卖', '35.00', 'DINING', '2026-10-31'],
+    ['酒酒出行', '18.60', 'TRANSPORT', '2026-10-30'],
+    ['永辉超市', '86.40', 'GROCERIES', '2026-10-29'],
+  ]);
+});
+
+test('does not turn paper receipt items into separate payments', () => {
+  const r = parseReceipts('鲜集超市\n2026-10-31 18:42\n牛奶 12 50\n面包 8 90\n实付金额 ¥21.40');
+  assert.equal(r.length, 1);
+  assert.equal(r[0].amount, '21.40');
+});

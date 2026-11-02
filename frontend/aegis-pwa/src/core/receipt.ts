@@ -174,6 +174,12 @@ export function parseReceipt(text: string): ParsedReceipt {
 // A bill-list row: a name with a signed amount at the end, e.g. "美团外卖 -35.00" or "Salary +5,000.00".
 // OCR often reads the minus sign as the Chinese character 一, so that counts as a minus too.
 const LIST_ROW = /^(.*?[\p{L}].*?)\s*([-−–—一+＋])\s*[¥￥]?\s*(\d{1,6}(?:,\d{3})*\.\d{2})$/u;
+// OCR of small screenshot text often drops the sign or the decimal point ("美团外卖 35 00",
+// "滴滴出行 .18 60"). Such a line still counts as a bill row when the line under it is the row's
+// date and time, which is how payment apps lay out every entry; paper-receipt item lines never are.
+const LOOSE_ROW = /^(.*?[\p{L}].*?)\s*([-−–—一+＋._])?\s*[¥￥]?\s*(\d{1,6})[.,\s](\d{2})$/u;
+const ROW_TIME = /\d{1,2}\s*[-/月]\s*\d{1,2}\s*日?\s+\d{1,2}:\d{2}/;
+const HEADER = /(支出|收入|本月|账单|合计|总计)/;
 
 /**
  * Everything found in one picture. A bill list with two or more signed rows gives one entry per
@@ -183,11 +189,20 @@ const LIST_ROW = /^(.*?[\p{L}].*?)\s*([-−–—一+＋])\s*[¥￥]?\s*(\d{1,6}
 export function parseReceipts(text: string, now = new Date()): ParsedReceipt[] {
   const lines = cleanLines(text);
   const rows: { i: number; name: string; sign: string; amount: string }[] = [];
+  const fine = (name: string) => wordy(name) && !junkName(name) && !TOTAL.test(name) && !SUBTOTAL.test(name) && !HEADER.test(name);
   lines.forEach((l, i) => {
     const m = l.match(LIST_ROW);
     if (m) {
       const name = tidyName(m[1]);
-      if (wordy(name) && !junkName(name) && !TOTAL.test(name) && !SUBTOTAL.test(name)) rows.push({ i, name, sign: m[2], amount: toAmount(m[3]) });
+      if (fine(name)) rows.push({ i, name, sign: m[2], amount: toAmount(m[3]) });
+      return;
+    }
+    const loose = l.match(LOOSE_ROW);
+    if (loose && ROW_TIME.test(lines[i + 1] ?? '')) {
+      // Strip OCR noise in front of the name (a logo read as "各" or "|").
+      const name = tidyName(loose[1].replace(/^[^\p{L}]*[各|]\s*(?=\p{L})/u, ''));
+      const sign = loose[2] === '+' || loose[2] === '＋' ? '+' : '-';
+      if (fine(name)) rows.push({ i, name, sign, amount: `${loose[3]}.${loose[4]}` });
     }
   });
   if (rows.length < 2) {
