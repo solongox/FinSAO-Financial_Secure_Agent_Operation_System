@@ -69,7 +69,7 @@ async function prepare(file: File): Promise<Blob | File> {
     for (let i = 0; i < d.length; i += 4) {
       let l = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) / 255;
       if (dark) l = 1 - l;
-      const v = Math.round(255 * l ** 2.2);
+      const v = Math.round(255 * l ** 1.4);
       d[i] = d[i + 1] = d[i + 2] = v;
     }
     ctx.putImageData(img, 0, 0);
